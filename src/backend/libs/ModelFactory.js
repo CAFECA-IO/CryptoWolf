@@ -1,13 +1,16 @@
-const Utils = require('./Utils');
-const Model = require('./Model.js');
+/* eslint-disable no-unused-vars */
+// const Utils = require('./Utils');
+const Model = require('./Model');
 
 class ModelFactory {
   static create({ struct }) {
     return Promise.resolve(new Model());
   }
+
   static find({ struct, condition }) {
     return Promise.resolve(new Model());
   }
+
   static save({ model }) {
     return Promise.resolve(true);
   }

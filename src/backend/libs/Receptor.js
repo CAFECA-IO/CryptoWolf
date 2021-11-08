@@ -1,17 +1,19 @@
+/* eslint-disable global-require */
+/* eslint-disable import/no-dynamic-require */
 const path = require('path');
 
 const pem = require('pem');
 const http = require('http');
-const spdy  = require('spdy');
-const koa = require('koa');
-const session = require('koa-session');
+const spdy = require('spdy');
+const Koa = require('koa');
+// const session = require('koa-session');
 const Router = require('koa-router');
 const bodyParser = require('koa-body');
 const staticServe = require('koa-static');
-const dvalue = require('dvalue');
+// const dvalue = require('dvalue');
 
 const Bot = require(path.resolve(__dirname, 'Bot.js'));
-const Utils = require(path.resolve(__dirname, 'Utils.js'));
+// const Utils = require(path.resolve(__dirname, 'Utils.js'));
 
 const defaultHTTP = [5566, 80];
 const defaultHTTPS = [7788, 443];
@@ -23,40 +25,44 @@ class Receptor extends Bot {
     this.router = new Router();
   }
 
-  init({ config, database, logger, i18n }) {
-    return super.init({ config, database, logger, i18n })
-    .then(() => this.registerAll())
-    .then(() => this);
+  init({
+    config, database, logger, i18n,
+  }) {
+    return super.init({
+      config, database, logger, i18n,
+    })
+      .then(() => this.registerAll())
+      .then(() => this);
   }
 
   start() {
     return super.start()
-    .then(() => this.createPem())
-    .then((options) => {
-      this.database.leveldb
-    })
-    .then((options) => {
-      const sessionSecret = dvalue.randomID(24);
-      const app = new koa();
-      app.use(staticServe(this.config.base.static))
-         .use(bodyParser({ multipart: true }))
-         .use(this.router.routes())
-         .use(this.router.allowedMethods());
-      return this.listen({ options, callback: app.callback() });
-    });
+      .then(() => this.createPem())
+      // .then((options) => {
+      //   this.database.leveldb;
+      // })
+      .then((options) => {
+        // const sessionSecret = dvalue.randomID(24);
+        const app = new Koa();
+        app.use(staticServe(this.config.base.static))
+          .use(bodyParser({ multipart: true }))
+          .use(this.router.routes())
+          .use(this.router.allowedMethods());
+        return this.listen({ options, callback: app.callback() });
+      });
   }
 
   createPem() {
     return new Promise((resolve, reject) => {
-      pem.createCertificate({days: 365, selfSigned: true}, (e, d) => {
-        if(e) {
-      	  reject(e);
+      pem.createCertificate({ days: 365, selfSigned: true }, (e, d) => {
+        if (e) {
+          reject(e);
         } else {
-          const pem = {
+          const newPem = {
             cert: d.certificate,
-            key: d.serviceKey
+            key: d.serviceKey,
           };
-          resolve(pem);
+          resolve(newPem);
         }
       });
     });
@@ -64,32 +70,28 @@ class Receptor extends Bot {
 
   registerAll() {
     return Promise.all(this.config.api.pathname.map((v) => {
-      const args = v.split('|').map((v) => v.trim());
-      const pathname = args[1].split(',').map((v) => v.trim());
+      const args = v.split('|').map((vv) => vv.trim());
+      const pathname = args[1].split(',').map((vv) => vv.trim());
       const options = { method: args[0].toLowerCase() };
       const operationParams = args[2].split('.');
       let operation;
+      // eslint-disable-next-line no-return-assign
       args.slice(3).map((k) => options[k] = true);
-      if(/Bot/i.test(operationParams[0])) {
+      if (/Bot/i.test(operationParams[0])) {
         return this.getBot(operationParams[1])
-        .then((bot) => {
-          operation = (inputs) => {
-          	return bot[operationParams[2]](inputs);
-          };
-          return this.register({ pathname, options, operation });
-        })
-      } else {
-        const Library = require(path.resolve(__dirname, `${operationParams[1]}.js`));
-        operation = (inputs) => {
-          return Library[operationParams[2]](inputs);
-        }
-        return this.register({ pathname, options, operation });
+          .then((bot) => {
+            operation = (inputs) => bot[operationParams[2]](inputs);
+            return this.register({ pathname, options, operation });
+          });
       }
+      const Library = require(path.resolve(__dirname, `${operationParams[1]}.js`));
+      operation = (inputs) => Library[operationParams[2]](inputs);
+      return this.register({ pathname, options, operation });
     }));
   }
 
   register({ pathname, options, operation }) {
-  	const method = options.method.toLowerCase();
+    const method = options.method.toLowerCase();
     this.router[method](pathname, (ctx, next) => {
       const inputs = {
         body: ctx.request.body,
@@ -102,27 +104,27 @@ class Receptor extends Bot {
 
       };
       return operation(inputs)
-      .then((rs) => {
-        ctx.body = rs;
-      	next();
-      });
+        .then((rs) => {
+          ctx.body = rs;
+          next();
+        });
     });
     return Promise.resolve(true);
   }
 
   listen({ options, callback }) {
-  	return Promise.all([
+    return Promise.all([
       this.listenHttp({ port: defaultHTTP.pop(), options, callback }),
-      this.listenHttps({ port: defaultHTTPS.pop(), options, callback })
+      this.listenHttps({ port: defaultHTTPS.pop(), options, callback }),
     ]).then(() => this);
   }
 
   listenHttp({ port, options, callback }) {
-  	return new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.serverHTTP = this.serverHTTP || http.createServer(options, callback);
       this.serverHTTP.on('error', () => {
         const newPort = defaultHTTP.pop();
-        if(defaultHTTP.length == 0) {
+        if (defaultHTTP.length === 0) {
           defaultHTTP.push(newPort + 1);
         }
         this.listenHttp({ port: newPort, options, callback }).then(resolve, reject);
@@ -139,7 +141,7 @@ class Receptor extends Bot {
       this.serverHTTPS = this.serverHTTPS || spdy.createServer(options, callback);
       this.serverHTTPS.on('error', () => {
         const newPort = defaultHTTPS.pop();
-        if(defaultHTTPS.length == 0) {
+        if (defaultHTTPS.length === 0) {
           defaultHTTPS.push(newPort + 1);
         }
         this.listenHttps({ port: newPort, options, callback }).then(resolve, reject);
@@ -154,7 +156,7 @@ class Receptor extends Bot {
   get servers() {
     return {
       HTTP: this.serverHTTP,
-      HTTPS: this.serverHTTPS
+      HTTPS: this.serverHTTPS,
     };
   }
 }

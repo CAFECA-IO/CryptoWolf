@@ -1,28 +1,33 @@
-const Utils = require('./Utils.js');
+// const Utils = require('./Utils.js');
+
 const Bots = [];
 
 class Bot {
   constructor() {
     Bots.push(this);
   }
-  init({ config, database, logger, i18n }) {
+
+  init({
+    config, database, logger, i18n,
+  }) {
     this.config = config;
     this.database = database;
     this.logger = logger;
     this.i18n = i18n;
     return Promise.resolve(this);
   }
+
   start() {
     return Promise.resolve(this);
   }
+
   ready() {
     return Promise.resolve(this);
   }
+
   getBot(name) {
-    const condition = new RegExp('^' + name + '$', 'i');
-    const bot = Bots.find((b) => {
-      return condition.test(b.name);
-    });
+    const condition = new RegExp(`^${name}$`, 'i');
+    const bot = Bots.find((b) => condition.test(b.name));
     return Promise.resolve(bot);
   }
 
@@ -32,7 +37,7 @@ class Bot {
     const db = this.database.leveldb;
     return new Promise((resolve, reject) => {
       db.put(key, value, (e) => {
-        if(e) {
+        if (e) {
           this.logger.debug('write err:', e);
           reject(e);
         } else {
@@ -41,11 +46,12 @@ class Bot {
       });
     });
   }
+
   delete({ key }) {
     const db = this.database.leveldb;
     return new Promise((resolve, reject) => {
       db.del(key, (e) => {
-        if(e) {
+        if (e) {
           reject(e);
         } else {
           resolve(true);
@@ -53,11 +59,12 @@ class Bot {
       });
     });
   }
+
   findOne({ key }) {
     const db = this.database.leveldb;
     return new Promise((resolve) => {
       db.get(key, (err, value) => {
-        if(err) {
+        if (err) {
           resolve();
         } else {
           resolve(value);
@@ -65,52 +72,54 @@ class Bot {
       });
     });
   }
+
   find({ key }) {
     const db = this.database.leveldb;
     return new Promise((resolve) => {
       const rs = [];
       db.createReadStream({
         gte: key,
-        lte: `${key.subString(0, key.length - 1)}${String.fromCharCode(key.charCodeAt(key.length - 1) + 1)}`
-      }).on('data', ({ key, value }) => {
-        rs.push({ key, value });
+        lte: `${key.subString(0, key.length - 1)}${String.fromCharCode(key.charCodeAt(key.length - 1) + 1)}`,
+      }).on('data', ({ key: thisKey, value }) => {
+        rs.push({ key: thisKey, value });
       }).on('end', () => {
         resolve(rs);
       });
     });
   }
+
   batch({ ops }) {
     const db = this.database.leveldb;
     return new Promise((resolve, reject) => {
       if (Array.isArray(ops)) {
-        var batchList = [];
+        const batchList = [];
         ops.forEach((item) => {
-          var listMember = {};
-          if (item.hasOwnProperty('type')) {
+          const listMember = {};
+          if (Object.prototype.hasOwnProperty.call(item, 'type')) {
             listMember.type = item.type;
           }
-          if (item.hasOwnProperty('key')) {
+          if (Object.prototype.hasOwnProperty.call(item, 'key')) {
             listMember.key = item.key;
           }
-          if (item.hasOwnProperty('value')) {
+          if (Object.prototype.hasOwnProperty.call(item, 'value')) {
             listMember.value = item.value;
           }
-          if (listMember.hasOwnProperty('type') && listMember.hasOwnProperty('key') && listMember.hasOwnProperty('value')) {
+          if (Object.prototype.hasOwnProperty.call(listMember, 'type') && Object.prototype.hasOwnProperty.call(listMember, 'key') && Object.prototype.hasOwnProperty.call(listMember, 'value')) {
             batchList.push(listMember);
           }
-        })
+        });
         if (batchList && batchList.length > 0) {
           db.batch(batchList, (err) => {
             reject(err);
-          })
-          resolve(true)
+          });
+          resolve(true);
         } else {
-          rejectresolve(Error('no input or format not valid'));
+          reject(Error('no input or format not valid'));
         }
       } else {
         reject(Error('array format not valid'));
       }
-    })
+    });
   }
   /* ----------------- */
   /* leveldb operation */
@@ -118,18 +127,18 @@ class Bot {
   static get isBot() {
     return true;
   }
-};
-
-const parseKey = (key) => {
-  if(typeof(key) == 'string' && key.trim().length > 0) {
-    return `_BOT.${key}`;
-  } else {
-    return;
-  }
 }
+
+// eslint-disable-next-line no-unused-vars
+const parseKey = (key) => {
+  if (typeof (key) === 'string' && key.trim().length > 0) {
+    return `_BOT.${key}`;
+  }
+};
+// eslint-disable-next-line no-unused-vars
 const parseValue = (value) => {
   let formatValue;
-  switch(typeof value) {
+  switch (typeof value) {
     case 'string':
       break;
 
@@ -137,6 +146,6 @@ const parseValue = (value) => {
   }
 
   return formatValue;
-}
+};
 
 module.exports = Bot;
