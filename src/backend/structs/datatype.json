@@ -1,0 +1,11 @@
+{
+  "id": "",
+  "string": "",
+  "number": "",
+  "timestamp": "",
+  "boolean": "",
+  "blob": "",
+  "struct": "",
+  "_isArray": "bool",
+  "_rule": "columnName: dataType"
+}
