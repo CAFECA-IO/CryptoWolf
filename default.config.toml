@@ -1,9 +1,9 @@
-# MerMer Default Config
+# CryptoWolf Default Config
 
-title = "MerMer"
+title = "CryptoWolf"
 
 [base]
-folder = "MerMer-framework"
+folder = "CryptoWolf"
 static = "./build/frontend/"
 debug = false
 
@@ -12,6 +12,19 @@ type = "ethereum"
 
 [database]
 type = "firebase"
+
+[tokenPair]
+firstTokenAddress = ''
+secondTokenAddress = ''
+
+[tidewalletjs]
+apiURL = 'https://staging.tidewallet.io/api/v1'
+apiKey = ''
+apiSecret = ''
+thirdPartyId = 'myAppleID'
+installId = 'myInstallID'
+debugMode = true
+networkPublish = false
 
 [api]
 pathname = [
