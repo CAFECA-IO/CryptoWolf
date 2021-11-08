@@ -5,6 +5,7 @@ title = "CryptoWolf"
 [base]
 folder = "CryptoWolf"
 static = "./build/frontend/"
+expectRateBound = 0.1
 debug = false
 
 [blockchain]
