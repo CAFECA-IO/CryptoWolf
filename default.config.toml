@@ -6,6 +6,7 @@ title = "CryptoWolf"
 folder = "CryptoWolf"
 static = "./build/frontend/"
 expectRateBound = 0.1
+swapRouterAddress = ''
 debug = false
 
 [blockchain]
@@ -15,8 +16,8 @@ type = "ethereum"
 type = "firebase"
 
 [tokenPair]
-firstTokenAddress = ''
-secondTokenAddress = ''
+aTokenAddress = ''
+bTokenAddress = ''
 
 [tidewalletjs]
 apiURL = 'https://staging.tidewallet.io/api/v1'

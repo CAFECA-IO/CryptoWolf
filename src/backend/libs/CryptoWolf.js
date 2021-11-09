@@ -13,7 +13,20 @@ class CryptoWolf extends Bot {
     return super.init({
       config, database, logger, i18n,
     })
-      .then(() => this);
+      .then(() => {
+        this.aDecimals = 0;
+        this.bDecimals = 0;
+        this.swapRouterAddress = this.config.base.swapRouterAddress;
+        this.aTokenAddress = this.config.tokenPair.aTokenAddress;
+        this.bTokenAddress = this.config.tokenPair.aTokenAddress;
+
+        this.eP = ''; // expected price
+        this.lastEP = ''; // last expected price
+        this.sD = ''; // standard Deviation
+        this.mP = ''; // market price
+
+        return this;
+      });
   }
 
   start() {
@@ -26,7 +39,7 @@ class CryptoWolf extends Bot {
       .then(() => this);
   }
 
-  async calculateExpectPrice(basePrice) {
+  async calculateExpectPrice() {
     // TODO: use ai to calculate
 
     // +- 10%
@@ -35,16 +48,27 @@ class CryptoWolf extends Bot {
     const isPlus = (Math.random() * 2) < 1;
     randomNum = isPlus ? randomNum : randomNum.multipliedBy(-1);
 
-    const bnBase = new BigNumber(basePrice);
-    const diff = bnBase.multipliedBy(randomNum).integerValue();
+    const bnMP = new BigNumber(this.mP);
+    const diff = bnMP.multipliedBy(randomNum).integerValue();
 
-    const bnRes = bnBase.plus(diff);
+    const bnRes = bnMP.plus(diff);
+
+    this.lastEP = this.eP;
+    this.eP = bnRes.toFixed();
 
     return bnRes.toFixed();
   }
 
   async calculateStandardDeviation() {
-    return true;
+    if (!this.eP) await this.calculateExpectPrice();
+    if (!this.lastEP) this.lastEP = this.mP;
+
+    const bnEP = new BigNumber(this.eP);
+    const bnLastEp = new BigNumber(this.lastEP);
+    const bnSD = bnEP.minus(bnLastEp).abs();
+
+    this.sD = bnSD.toFixed();
+    return bnSD.toFixed();
   }
 
   async checkMarketPrice() {
