@@ -151,7 +151,9 @@ class CryptoWolf extends Bot {
     this.mPs.forEach((v) => {
       total = (new BigNumber(total)).plus(new BigNumber(v.mP)).toFixed();
     });
-    this.mP = (new BigNumber(total)).dividedBy(new BigNumber(this.mPs.length)).toFixed();
+    if (this.mPs.length === MPS_MAX_LENGTH) {
+      this.mP = (new BigNumber(total)).dividedBy(new BigNumber(this.mPs.length)).toFixed();
+    }
 
     this.logger.debug('this.mPs', this.mPs);
     this.logger.debug('this.mP', this.mP);
@@ -162,8 +164,15 @@ class CryptoWolf extends Bot {
     return true;
   }
 
-  async tradingAmount() {
-    return true;
+  tradingAmount() {
+    // Trading amount (A) = 1 - (1 / (eP - mP)^2) * 10%, if A < 0 => A = 0
+    if (!this.mP) throw new Error('market price not prepared');
+
+    const bnEP = new BigNumber(this.eP);
+    const bnMP = new BigNumber(this.mP);
+    const bn1 = new BigNumber(1);
+    const amount = bn1.minus(bn1.dividedBy(bnEP.minus(bnMP).exponentiatedBy(2)).multipliedBy(0.1));
+    return amount.lt(0) ? '0' : amount.toFixed();
   }
 
   async getPair(token0Address, token1Address) {
