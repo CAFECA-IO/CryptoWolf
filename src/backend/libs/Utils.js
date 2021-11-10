@@ -584,6 +584,39 @@ class Utils {
       }
     };
   }
+
+  static leftPad32(str) {
+    let result = '';
+    let length = 32 * 2;
+    let arr;
+    if (typeof str === 'string') {
+      str = str.replace('0x', '');
+      length -= (str.length % length) ? (str.length % length) : length;
+      arr = new Array(length).fill(0);
+      arr.push(str);
+    } else {
+      arr = new Array(length).fill(0);
+    }
+    result = arr.join('');
+    console.log('!!! leftPad32', result);
+    return result;
+  }
+
+  static rightPad32(str) {
+    let result = '';
+    let length = 32 * 2;
+    let arr = [];
+    if (typeof str === 'string') {
+      str = str.replace('0x', '');
+      length -= (str.length % length) ? (str.length % length) : length;
+      arr.push(str);
+      arr = arr.concat(new Array(length).fill(0));
+    } else {
+      arr = new Array(length).fill(0);
+    }
+    result = arr.join('');
+    return result;
+  }
 }
 
 module.exports = Utils;
