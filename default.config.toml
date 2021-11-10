@@ -14,8 +14,8 @@ blockchainId = 'F000003C'
 factoryContractAddress = ''
 
   [blockchain.tokenPair]
-  aTokenAddress = ''
-  bTokenAddress = ''
+  token0Address = ''
+  token1Address = ''
 
 [database]
 type = "firebase"

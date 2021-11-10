@@ -12,6 +12,7 @@ const toml = require('toml');
 const i18n = require('i18n');
 const dvalue = require('dvalue');
 const ecRequest = require('ecrequest');
+const BigNumber = require('bignumber.js');
 
 class Utils {
   static waterfallPromise(jobs) {
@@ -616,6 +617,21 @@ class Utils {
     }
     result = arr.join('');
     return result;
+  }
+
+  /**
+   * @override
+   * @method toSmallestUint
+   * @param {string} amount
+   * @param {Number} decimals
+   * @returns {string}
+   */
+  static toSmallestUint(amount, decimals) {
+    const bnAmount = new BigNumber(amount);
+    const bnBase = new BigNumber(10);
+    const bnDecimal = bnBase.exponentiatedBy(decimals);
+    const smallestUint = bnAmount.multipliedBy(bnDecimal).toFixed();
+    return smallestUint;
   }
 }
 

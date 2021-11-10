@@ -2,6 +2,8 @@ const BigNumber = require('bignumber.js');
 const TideWallet = require('@cafeca/tidewalletjs/src/index');
 const Bot = require('./Bot');
 const SmartContract = require('./SmartContract');
+const Transaction = require('../structs/Transaction');
+const Utils = require('./Utils');
 
 const MPS_MAX_LENGTH = 40;
 
@@ -45,18 +47,18 @@ class CryptoWolf extends Bot {
     })
       .then(() => {
         this._baseChain = this.config.blockchain;
-        this.aDecimals = 0;
-        this.bDecimals = 0;
+        this.token0Decimals = 0;
+        this.token1Decimals = 0;
         this.factoryContractAddress = this._baseChain.factoryContractAddress;
         this.pairContractAddress = '';
-        this.aTokenAddress = this._baseChain.tokenPair.aTokenAddress;
-        this.bTokenAddress = this._baseChain.tokenPair.bTokenAddress;
+        this.token0Address = this._baseChain.tokenPair.token0Address;
+        this.token1Address = this._baseChain.tokenPair.token1Address;
 
         // 20 min price storage
         this.mPs = [];
 
         this.eP = ''; // expected price
-        this.lastEP = ''; // last expected price
+        this.lastMP = ''; // last market price
         this.sD = ''; // standard Deviation
         this.mP = ''; // market price
 
@@ -70,9 +72,13 @@ class CryptoWolf extends Bot {
         const overview = await this.tw.overview();
         this.accountInfo = overview.currencies.find((info) => (info.blockchainId === this._baseChain.blockchainId
             && info.type === 'currency'));
+        this.selfAddress = await this.tw.getReceivingAddress(this.accountInfo.id);
 
         // get pair contract
-        this.pairContractAddress = await this.getPair(this.aTokenAddress, this.bTokenAddress);
+        this.pairContractAddress = await this.getPair(this.token0Address, this.token1Address);
+
+        // get token detail
+        await this.getTokenDetail();
         return this;
       });
   }
@@ -81,7 +87,14 @@ class CryptoWolf extends Bot {
     return super.ready()
       .then(() => {
         setInterval(async () => {
-          await this.checkMarketPrice();
+          try {
+            await this.checkMarketPrice();
+            await this.calculateExpectPrice();
+            await this.calculateStandardDeviation();
+            await this.trade();
+          } catch (error) {
+            this.logger.error(error);
+          }
         }, 15000);
         return this;
       });
@@ -102,7 +115,7 @@ class CryptoWolf extends Bot {
 
     const bnRes = bnMP.plus(diff);
 
-    this.lastEP = this.eP;
+    this.lastMP = this.eP;
     this.eP = bnRes.toFixed();
 
     return bnRes.toFixed();
@@ -110,12 +123,12 @@ class CryptoWolf extends Bot {
 
   async calculateStandardDeviation() {
     if (!this.mP) throw new Error('market price not prepared');
-    if (!this.eP) await this.calculateExpectPrice();
-    if (!this.lastEP) this.lastEP = this.mP;
+    if (!this.mP) await this.calculateExpectPrice();
+    if (!this.lastMP) this.lastMP = this.mP;
 
-    const bnEP = new BigNumber(this.eP);
-    const bnLastEp = new BigNumber(this.lastEP);
-    const bnSD = bnEP.minus(bnLastEp).abs();
+    const bnMP = new BigNumber(this.mP);
+    const bnLastMp = new BigNumber(this.lastMP);
+    const bnSD = bnMP.minus(bnLastMp).dividedBy(2).abs();
 
     this.sD = bnSD.toFixed();
     return bnSD.toFixed();
@@ -161,12 +174,72 @@ class CryptoWolf extends Bot {
   }
 
   async trade() {
-    return true;
+    // if eP > mP => Buy A, if eP < mP => Buy B
+    if (!this.mP) throw new Error('market price not prepared');
+    if (!this.eP) throw new Error('expect price not prepared');
+
+    const bnEP = new BigNumber(this.eP);
+    const bnMP = new BigNumber(this.mP);
+
+    const transaction = new Transaction({
+      accountId: this.accountInfo.id,
+      to: this.pairContractAddress,
+      amount: '0',
+    });
+
+    let amountIn = '';
+    let minAmountOut = '';
+    let amountInToken = '';
+    let amountOutToken = '';
+    if (bnEP.gt(bnMP)) {
+      // buy a
+      amountIn = '';
+      minAmountOut = '';
+      amountInToken = {
+        decimals: this.token0Decimals,
+        contract: this.token0Address,
+      };
+      amountOutToken = {
+        decimals: this.token1Decimals,
+        contract: this.token1Address,
+      };
+    } else {
+      // buy b
+      amountIn = '';
+      minAmountOut = '';
+      amountInToken = {
+        decimals: this.token1Decimals,
+        contract: this.token1Address,
+      };
+      amountOutToken = {
+        decimals: this.token0Decimals,
+        contract: this.token0Address,
+      };
+    }
+    const message = this.swapData(amountIn, minAmountOut, amountInToken, amountOutToken);
+    transaction.message = message;
+
+    // get fee
+    const resFee = await this.tw.getTransactionFee({
+      id: this.accountInfo.id,
+      to: this.pairContractAddress,
+      amount: '0',
+      data: transaction.message,
+    });
+    transaction.feePerUnit = resFee.feePerUnit.fast;
+    transaction.feeUnit = resFee.unit;
+    transaction.fee = (new BigNumber(transaction.feePerUnit)).multipliedBy(transaction.feeUnit).toFixed();
+
+    this.logger.debug('trade transaction', transaction);
+    // send transaction mint
+    const res = await this.tw.sendTransaction(this.accountInfo.id, transaction.data);
+    this.logger.debug('trade transaction res', res);
   }
 
   tradingAmount() {
     // Trading amount (A) = 1 - (1 / (eP - mP)^2) * 10%, if A < 0 => A = 0
     if (!this.mP) throw new Error('market price not prepared');
+    if (!this.eP) throw new Error('expect price not prepared');
 
     const bnEP = new BigNumber(this.eP);
     const bnMP = new BigNumber(this.mP);
@@ -176,13 +249,6 @@ class CryptoWolf extends Bot {
   }
 
   async getPair(token0Address, token1Address) {
-    // 0xe6a43905
-    // 000000000000000000000000ef627ac9591f21819dfc465f4c4f53a2463c77a2
-    // 0000000000000000000000003b670fe42b088494f59c08c464cda93ec18b6445
-
-    // 0xc5d24601
-    // 0000000000000000000000000000000000000000000000003b670fe42b088494
-    // f59c08c464cda93ec18b64453b670fe42b088494f59c08c464cda93ec18b6445
     const message = SmartContract.toContractData({
       func: 'getPair(address,address)',
       params: [token0Address.replace('0x', ''), token1Address.replace('0x', '')],
@@ -192,6 +258,90 @@ class CryptoWolf extends Bot {
     const { result } = await this.tw.callContract(this._baseChain.blockchainId, this.factoryContractAddress, message);
     this.logger.debug('getPair res', result);
     return `0x${result.slice(-40)}`;
+  }
+
+  async getTokenDetail() {
+    // reDefine this.token0Address from pair contract
+    const getToken0Message = SmartContract.toContractData({
+      func: 'token0()',
+      params: [],
+    });
+
+    this.logger.debug('getToken0 message', getToken0Message);
+    const { result: token0Address } = await this.tw.callContract(this._baseChain.blockchainId, this.pairContractAddress, getToken0Message);
+    this.logger.debug('getToken0 res', token0Address);
+    this.token0Address = `0x${token0Address.slice(-40)}`;
+
+    // reDefine this.token1Address from pair contract
+    const getToken1Message = SmartContract.toContractData({
+      func: 'token1()',
+      params: [],
+    });
+
+    this.logger.debug('getToken1 message', getToken1Message);
+    const { result: token1Address } = await this.tw.callContract(this._baseChain.blockchainId, this.pairContractAddress, getToken1Message);
+    this.logger.debug('getToken1 res', token1Address);
+    this.token1Address = `0x${token1Address.slice(-40)}`;
+
+    // token1 decimals
+    // reDefine this.token0Address from pair contract
+    const getDecimalsMessage = SmartContract.toContractData({
+      func: 'decimals()',
+      params: [],
+    });
+
+    this.logger.debug('getDecimals message', getDecimalsMessage);
+    const { result: token0Decimals } = await this.tw.callContract(this._baseChain.blockchainId, this.token0Address, getDecimalsMessage);
+    this.logger.debug('get token0 decimals res', token0Decimals);
+    this.token0Decimals = parseInt(token0Decimals, 16);
+
+    const { result: token1Decimals } = await this.tw.callContract(this._baseChain.blockchainId, this.token1Address, getDecimalsMessage);
+    this.logger.debug('get token1 decimals res', token1Decimals);
+    this.token1Decimals = parseInt(token1Decimals, 16);
+  }
+
+  swapData(amountIn, minAmountOut, amountInToken, amountOutToken) {
+    const funcName = 'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)';
+
+    const amountInData = Utils.toSmallestUint(
+      amountIn,
+      amountInToken.decimals,
+    )
+      .split('.')[0]
+      .padStart(64, '0');
+    const minAmountOutData = Utils.toSmallestUint(
+      minAmountOut,
+      amountOutToken.decimals,
+    )
+      .split('.')[0]
+      .padStart(64, '0');
+    const toData = this.selfAddress.replace('0x', '').padStart(64, '0');
+    const dateline = Utils.toHex(Math.round(Date.now(), 1000) + 1800)
+      .replace('0x', '')
+      .padStart(64, '0');
+    const addressCount = Utils.toHex(2).padStart(64, '0');
+    const amountInTokenContractData = amountInToken.contract
+      .replace('0x', '')
+      .padStart(64, '0');
+    const amountOutTokenContractData = amountOutToken.contract
+      .replace('0x', '')
+      .padStart(64, '0');
+
+    const data = `${amountInData
+      + minAmountOutData
+    }00000000000000000000000000000000000000000000000000000000000000a0${
+      toData
+    }${dateline
+    }${addressCount
+    }${amountInTokenContractData
+    }${amountOutTokenContractData}`;
+
+    const result = SmartContract.toContractData({
+      func: funcName,
+      params: data,
+    });
+
+    return result;
   }
 }
 
