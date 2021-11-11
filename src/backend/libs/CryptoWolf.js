@@ -50,9 +50,10 @@ class CryptoWolf extends Bot {
         this.token0Decimals = 0;
         this.token1Decimals = 0;
         this.factoryContractAddress = this._baseChain.factoryContractAddress;
+        this.routerContractAddress = this._baseChain.routerContractAddress;
         this.pairContractAddress = '';
-        this.token0Address = this._baseChain.tokenPair.token0Address;
-        this.token1Address = this._baseChain.tokenPair.token1Address;
+        this.token0Address = this._baseChain.token0Address;
+        this.token1Address = this._baseChain.token1Address;
 
         // 20 min price storage
         this.mPs = [];
@@ -89,9 +90,11 @@ class CryptoWolf extends Bot {
         setInterval(async () => {
           try {
             await this.checkMarketPrice();
-            await this.calculateExpectPrice();
-            await this.calculateStandardDeviation();
-            await this.trade();
+            if (this.mPs.length === MPS_MAX_LENGTH) {
+              await this.calculateExpectPrice();
+              await this.calculateStandardDeviation();
+              await this.trade();
+            }
           } catch (error) {
             this.logger.error(error);
           }
@@ -371,6 +374,60 @@ class CryptoWolf extends Bot {
     });
 
     return result;
+  }
+
+  async isAllowanceEnough(contract, amount) {
+    const message = SmartContract.toContractData({
+      func: 'allowance(address,address)',
+      params: [
+        this.selfAddress.replace('0x', ''),
+        this.routerContractAddress.replace('0x', ''),
+      ],
+    });
+
+    this.logger.debug('allowance message', message);
+    const { result } = await this.tw.callContract(this._baseChain.blockchainId, contract, message);
+    this.logger.debug('allowance res', result);
+
+    const allowanceAmount = new BigNumber(result, 16);
+    console.log('allowance amount', allowanceAmount.toFixed());
+    return allowanceAmount.gt(amount);
+  }
+
+  async approve(contract, amount) {
+    const amountValue = amount.replace('0x', '');
+    const message = SmartContract.toContractData({
+      func: 'approve(address,uint256)',
+      params: [
+        this.routerContractAddress.replace('0x', ''),
+        (amountValue && amountValue == '0') ? amount : ''.padEnd(64, 'f'),
+      ],
+    });
+    this.logger.debug('approve message', message);
+
+    const transaction = new Transaction({
+      accountId: this.accountInfo.id,
+      to: contract,
+      amount: '0',
+      message,
+    });
+
+    // get fee
+    const resFee = await this.tw.getTransactionFee({
+      id: this.accountInfo.id,
+      to: contract,
+      amount: '0',
+      data: transaction.message,
+    });
+    transaction.feePerUnit = resFee.feePerUnit.fast;
+    transaction.feeUnit = resFee.unit;
+    transaction.fee = (new BigNumber(transaction.feePerUnit)).multipliedBy(transaction.feeUnit).toFixed();
+
+    this.logger.debug('approve transaction', transaction);
+    const res = await this.tw.sendTransaction(this.accountInfo.id, transaction.data);
+    this.logger.debug('approve transaction res', res);
+
+    return res;
   }
 }
 
