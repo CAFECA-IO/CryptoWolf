@@ -194,32 +194,39 @@ class CryptoWolf extends Bot {
     let minAmountOut = '';
     let amountInToken = '';
     let amountOutToken = '';
+    const amount = await this.tradingAmount();
     if (bnEP.gt(bnMP)) {
-      // buy a
-      amountIn = '';
-      minAmountOut = '';
+      // buy 0
+      amountIn = amount.token1To0.amountIn;
+      minAmountOut = amount.token1To0.minAmountOut;
       amountInToken = {
-        decimals: this.token0Decimals,
-        contract: this.token0Address,
-      };
-      amountOutToken = {
         decimals: this.token1Decimals,
         contract: this.token1Address,
       };
+      amountOutToken = {
+        decimals: this.token0Decimals,
+        contract: this.token0Address,
+      };
+      if (!await this.isAllowanceEnough(this.token1Address, amount.token1To0.amountIn)) {
+        await this.approve(this.token1Address, amount.token1To0.amountIn);
+      }
     } else {
-      // buy b
-      amountIn = '';
-      minAmountOut = '';
+      // buy 1
+      amountIn = amount.token0To1.amountIn;
+      minAmountOut = amount.token0To1.minAmountOut;
       amountInToken = {
-        decimals: this.token1Decimals,
-        contract: this.token1Address,
-      };
-      amountOutToken = {
         decimals: this.token0Decimals,
         contract: this.token0Address,
       };
+      amountOutToken = {
+        decimals: this.token1Decimals,
+        contract: this.token1Address,
+      };
+      if (!await this.isAllowanceEnough(this.token0Address, amount.token0To1.amountIn)) {
+        await this.approve(this.token0Address, amount.token0To1.amountIn);
+      }
     }
-    const message = this.swapData(amountIn, minAmountOut, amountInToken, amountOutToken);
+    const message = this.swapTokenData(amountIn, minAmountOut, amountInToken, amountOutToken);
     transaction.message = message;
 
     // get fee
@@ -237,6 +244,7 @@ class CryptoWolf extends Bot {
     // send transaction mint
     const res = await this.tw.sendTransaction(this.accountInfo.id, transaction.data);
     this.logger.debug('trade transaction res', res);
+    return res;
   }
 
   async tradingAmount() {
@@ -252,14 +260,25 @@ class CryptoWolf extends Bot {
     const balance = await this.getBalance();
     const MAX_PROTECTION = 0.1;
 
-    if (this.sD === '0') {
-      return {
-        token0To1: (new BigNumber(balance.token0)).multipliedBy(0.001).integerValue().toFixed(),
-        token1To0: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
-      };
-    }
     const bnEP = new BigNumber(this.eP);
     const bnMP = new BigNumber(this.mP);
+    if (this.sD === '0') {
+      return {
+        token0To1: {
+          amountIn: (new BigNumber(balance.token0)).multipliedBy(0.001).integerValue().toFixed(),
+          minAmountOut: (new BigNumber(balance.token0)).multipliedBy(0.001).dividedBy(bnMP).multipliedBy(0.9)
+            .integerValue()
+            .toFixed(),
+        },
+        token1To0: {
+          amountIn: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
+          minAmountOut: (new BigNumber(balance.token1)).multipliedBy(0.001).multipliedBy(bnMP).multipliedBy(0.9)
+            .integerValue()
+            .toFixed(),
+        },
+      };
+    }
+
     let rate = new BigNumber(1).multipliedBy(MAX_PROTECTION);
     const d = bnEP.minus(bnMP).abs().dividedBy(new BigNumber(this.sD));
 
@@ -268,8 +287,18 @@ class CryptoWolf extends Bot {
     if (d.gt(2) && d.lte(3)) rate = d.minus(2).multipliedBy(0.047).plus(0.95).multipliedBy(MAX_PROTECTION);
 
     return {
-      token0To1: (new BigNumber(balance.token0)).multipliedBy(rate).integerValue().toFixed(),
-      token1To0: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
+      token0To1: {
+        amountIn: (new BigNumber(balance.token0)).multipliedBy(rate).integerValue().toFixed(),
+        minAmountOut: (new BigNumber(balance.token0)).multipliedBy(rate).dividedBy(bnMP).multipliedBy(0.9)
+          .integerValue()
+          .toFixed(),
+      },
+      token1To0: {
+        amountIn: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
+        minAmountOut: (new BigNumber(balance.token1)).multipliedBy(rate).multipliedBy(bnMP).multipliedBy(0.9)
+          .integerValue()
+          .toFixed(),
+      },
     };
   }
 
@@ -342,7 +371,7 @@ class CryptoWolf extends Bot {
     };
   }
 
-  swapData(amountIn, minAmountOut, amountInToken, amountOutToken) {
+  swapTokenData(amountIn, minAmountOut, amountInToken, amountOutToken) {
     const funcName = 'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)';
 
     const amountInData = amountIn.replace('0x', '').padStart(64, '0');
@@ -400,7 +429,7 @@ class CryptoWolf extends Bot {
       func: 'approve(address,uint256)',
       params: [
         this.routerContractAddress.replace('0x', ''),
-        (amountValue && amountValue == '0') ? amount : ''.padEnd(64, 'f'),
+        (amountValue && amountValue === '0') ? amount : ''.padEnd(64, 'f'),
       ],
     });
     this.logger.debug('approve message', message);
