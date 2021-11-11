@@ -618,21 +618,6 @@ class Utils {
     result = arr.join('');
     return result;
   }
-
-  /**
-   * @override
-   * @method toSmallestUint
-   * @param {string} amount
-   * @param {Number} decimals
-   * @returns {string}
-   */
-  static toSmallestUint(amount, decimals) {
-    const bnAmount = new BigNumber(amount);
-    const bnBase = new BigNumber(10);
-    const bnDecimal = bnBase.exponentiatedBy(decimals);
-    const smallestUint = bnAmount.multipliedBy(bnDecimal).toFixed();
-    return smallestUint;
-  }
 }
 
 module.exports = Utils;

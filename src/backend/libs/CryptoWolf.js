@@ -236,16 +236,38 @@ class CryptoWolf extends Bot {
     this.logger.debug('trade transaction res', res);
   }
 
-  tradingAmount() {
-    // Trading amount (A) = 1 - (1 / (eP - mP)^2) * 10%, if A < 0 => A = 0
+  async tradingAmount() {
+    // if sD == 0, amount = 0.1% total;
+    // d = |(eP-mP)| / sD
+    // d <= 1 -> amount = (d * 68%) * 10% total
+    // 1 < d <= 2 -> amount = (68% + (d-1) * (95 - 68)%) * 10% total
+    // 2 < d <= 3 -> amount = (95% + (d-2) * (99.7 - 95)%) * 10% total
+    // d > 3 -> amount = 10% total
     if (!this.mP) throw new Error('market price not prepared');
     if (!this.eP) throw new Error('expect price not prepared');
 
+    const balance = await this.getBalance();
+    const MAX_PROTECTION = 0.1;
+
+    if (this.sD === '0') {
+      return {
+        token0To1: (new BigNumber(balance.token0)).multipliedBy(0.001).integerValue().toFixed(),
+        token1To0: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
+      };
+    }
     const bnEP = new BigNumber(this.eP);
     const bnMP = new BigNumber(this.mP);
-    const bn1 = new BigNumber(1);
-    const amount = bn1.minus(bn1.dividedBy(bnEP.minus(bnMP).exponentiatedBy(2)).multipliedBy(0.1));
-    return amount.lt(0) ? '0' : amount.toFixed();
+    let rate = new BigNumber(1).multipliedBy(MAX_PROTECTION);
+    const d = bnEP.minus(bnMP).abs().dividedBy(new BigNumber(this.sD));
+
+    if (d.lte(1)) rate = d.multipliedBy(0.68);
+    if (d.gt(1) && d.lte(2)) rate = d.minus(1).multipliedBy(0.27).plus(0.68).multipliedBy(MAX_PROTECTION);
+    if (d.gt(2) && d.lte(3)) rate = d.minus(2).multipliedBy(0.047).plus(0.95).multipliedBy(MAX_PROTECTION);
+
+    return {
+      token0To1: (new BigNumber(balance.token0)).multipliedBy(rate).integerValue().toFixed(),
+      token1To0: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
+    };
   }
 
   async getPair(token0Address, token1Address) {
@@ -284,7 +306,6 @@ class CryptoWolf extends Bot {
     this.token1Address = `0x${token1Address.slice(-40)}`;
 
     // token1 decimals
-    // reDefine this.token0Address from pair contract
     const getDecimalsMessage = SmartContract.toContractData({
       func: 'decimals()',
       params: [],
@@ -300,21 +321,29 @@ class CryptoWolf extends Bot {
     this.token1Decimals = parseInt(token1Decimals, 16);
   }
 
+  async getBalance() {
+    const getBalanceMessage = SmartContract.toContractData({
+      func: 'balanceOf(address)',
+      params: [this.selfAddress],
+    });
+    this.logger.debug('getBalance message', getBalanceMessage);
+    const { result: token0Balance } = await this.tw.callContract(this._baseChain.blockchainId, this.token0Address, getBalanceMessage);
+    this.logger.debug('get token0 balance res', token0Balance);
+
+    const { result: token1Balance } = await this.tw.callContract(this._baseChain.blockchainId, this.token1Address, getBalanceMessage);
+    this.logger.debug('get token1 balance res', token1Balance);
+
+    return {
+      token0: (new BigNumber(token0Balance, 16)).toFixed(),
+      token1: (new BigNumber(token1Balance, 16)).toFixed(),
+    };
+  }
+
   swapData(amountIn, minAmountOut, amountInToken, amountOutToken) {
     const funcName = 'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)';
 
-    const amountInData = Utils.toSmallestUint(
-      amountIn,
-      amountInToken.decimals,
-    )
-      .split('.')[0]
-      .padStart(64, '0');
-    const minAmountOutData = Utils.toSmallestUint(
-      minAmountOut,
-      amountOutToken.decimals,
-    )
-      .split('.')[0]
-      .padStart(64, '0');
+    const amountInData = amountIn.replace('0x', '').padStart(64, '0');
+    const minAmountOutData = minAmountOut.replace('0x', '').padStart(64, '0');
     const toData = this.selfAddress.replace('0x', '').padStart(64, '0');
     const dateline = Utils.toHex(Math.round(Date.now(), 1000) + 1800)
       .replace('0x', '')
