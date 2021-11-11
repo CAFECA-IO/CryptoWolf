@@ -464,6 +464,7 @@ class Utils {
       log: console.log,
       debug: base.debug ? console.log : () => {},
       trace: console.trace,
+      error: console.error,
     });
   }
 
@@ -599,7 +600,9 @@ class Utils {
       arr = new Array(length).fill(0);
     }
     result = arr.join('');
-    console.log('!!! leftPad32', result);
+    console.log('leftPad32 str', str, str.length);
+    console.log('leftPad32 result', result, result.length);
+
     return result;
   }
 

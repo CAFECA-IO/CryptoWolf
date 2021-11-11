@@ -46,6 +46,7 @@ class CryptoWolf extends Bot {
       });
     })
       .then(() => {
+        this.tradingLock = false;
         this._baseChain = this.config.blockchain;
         this.token0Decimals = 0;
         this.token1Decimals = 0;
@@ -74,6 +75,7 @@ class CryptoWolf extends Bot {
         this.accountInfo = overview.currencies.find((info) => (info.blockchainId === this._baseChain.blockchainId
             && info.type === 'currency'));
         this.selfAddress = await this.tw.getReceivingAddress(this.accountInfo.id);
+        this.logger.log('this.selfAddress', this.selfAddress);
 
         // get pair contract
         this.pairContractAddress = await this.getPair(this.token0Address, this.token1Address);
@@ -89,6 +91,8 @@ class CryptoWolf extends Bot {
       .then(() => {
         setInterval(async () => {
           try {
+            if (this.tradingLock) return;
+            this.tradingLock = true;
             await this.checkMarketPrice();
             if (this.mPs.length === MPS_MAX_LENGTH) {
               await this.calculateExpectPrice();
@@ -98,6 +102,7 @@ class CryptoWolf extends Bot {
           } catch (error) {
             this.logger.error(error);
           }
+          this.tradingLock = false;
         }, 15000);
         return this;
       });
@@ -177,6 +182,7 @@ class CryptoWolf extends Bot {
   }
 
   async trade() {
+    this.logger.debug('trade');
     // if eP > mP => Buy A, if eP < mP => Buy B
     if (!this.mP) throw new Error('market price not prepared');
     if (!this.eP) throw new Error('expect price not prepared');
@@ -186,7 +192,7 @@ class CryptoWolf extends Bot {
 
     const transaction = new Transaction({
       accountId: this.accountInfo.id,
-      to: this.pairContractAddress,
+      to: this.routerContractAddress,
       amount: '0',
     });
 
@@ -231,8 +237,8 @@ class CryptoWolf extends Bot {
 
     // get fee
     const resFee = await this.tw.getTransactionFee({
-      id: this.accountInfo.id,
-      to: this.pairContractAddress,
+      id: transaction.accountId,
+      to: transaction.to,
       amount: '0',
       data: transaction.message,
     });
@@ -241,7 +247,6 @@ class CryptoWolf extends Bot {
     transaction.fee = (new BigNumber(transaction.feePerUnit)).multipliedBy(transaction.feeUnit).toFixed();
 
     this.logger.debug('trade transaction', transaction);
-    // send transaction mint
     const res = await this.tw.sendTransaction(this.accountInfo.id, transaction.data);
     this.logger.debug('trade transaction res', res);
     return res;
@@ -266,15 +271,17 @@ class CryptoWolf extends Bot {
       return {
         token0To1: {
           amountIn: (new BigNumber(balance.token0)).multipliedBy(0.001).integerValue().toFixed(),
-          minAmountOut: (new BigNumber(balance.token0)).multipliedBy(0.001).dividedBy(bnMP).multipliedBy(0.9)
-            .integerValue()
-            .toFixed(),
+          // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(0.001).dividedBy(bnMP).multipliedBy(0.9)
+          //   .integerValue()
+          //   .toFixed(),
+          minAmountOut: '0', // -- temp
         },
         token1To0: {
           amountIn: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
-          minAmountOut: (new BigNumber(balance.token1)).multipliedBy(0.001).multipliedBy(bnMP).multipliedBy(0.9)
-            .integerValue()
-            .toFixed(),
+          // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(0.001).multipliedBy(bnMP).multipliedBy(0.9)
+          //   .integerValue()
+          //   .toFixed(),
+          minAmountOut: '0', // -- temp
         },
       };
     }
@@ -289,15 +296,17 @@ class CryptoWolf extends Bot {
     return {
       token0To1: {
         amountIn: (new BigNumber(balance.token0)).multipliedBy(rate).integerValue().toFixed(),
-        minAmountOut: (new BigNumber(balance.token0)).multipliedBy(rate).dividedBy(bnMP).multipliedBy(0.9)
-          .integerValue()
-          .toFixed(),
+        // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(rate).dividedBy(bnMP).multipliedBy(0.9)
+        //   .integerValue()
+        //   .toFixed(),
+        minAmountOut: '0', // -- temp
       },
       token1To0: {
         amountIn: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
-        minAmountOut: (new BigNumber(balance.token1)).multipliedBy(rate).multipliedBy(bnMP).multipliedBy(0.9)
-          .integerValue()
-          .toFixed(),
+        // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(rate).multipliedBy(bnMP).multipliedBy(0.9)
+        //   .integerValue()
+        //   .toFixed(),
+        minAmountOut: '0', // -- temp
       },
     };
   }
@@ -356,7 +365,7 @@ class CryptoWolf extends Bot {
   async getBalance() {
     const getBalanceMessage = SmartContract.toContractData({
       func: 'balanceOf(address)',
-      params: [this.selfAddress],
+      params: [this.selfAddress.replace('0x', '')],
     });
     this.logger.debug('getBalance message', getBalanceMessage);
     const { result: token0Balance } = await this.tw.callContract(this._baseChain.blockchainId, this.token0Address, getBalanceMessage);
@@ -372,15 +381,18 @@ class CryptoWolf extends Bot {
   }
 
   swapTokenData(amountIn, minAmountOut, amountInToken, amountOutToken) {
+    this.logger.debug(`swapTokenData(${amountIn}, ${minAmountOut}), ${amountInToken}, ${amountOutToken}`);
+
     const funcName = 'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)';
 
     const amountInData = amountIn.replace('0x', '').padStart(64, '0');
     const minAmountOutData = minAmountOut.replace('0x', '').padStart(64, '0');
     const toData = this.selfAddress.replace('0x', '').padStart(64, '0');
-    const dateline = Utils.toHex(Math.round(Date.now(), 1000) + 1800)
+    // const dateline = Utils.toHex(Math.round(Date.now() / 1000))
+    const dateline = Utils.toHex(Date.now())
       .replace('0x', '')
       .padStart(64, '0');
-    const addressCount = Utils.toHex(2).padStart(64, '0');
+    const addressCount = Utils.toHex(2).replace('0x', '').padStart(64, '0');
     const amountInTokenContractData = amountInToken.contract
       .replace('0x', '')
       .padStart(64, '0');
@@ -390,12 +402,7 @@ class CryptoWolf extends Bot {
 
     const data = `${amountInData
       + minAmountOutData
-    }00000000000000000000000000000000000000000000000000000000000000a0${
-      toData
-    }${dateline
-    }${addressCount
-    }${amountInTokenContractData
-    }${amountOutTokenContractData}`;
+    }00000000000000000000000000000000000000000000000000000000000000a0${toData}${dateline}${addressCount}${amountInTokenContractData}${amountOutTokenContractData}`;
 
     const result = SmartContract.toContractData({
       func: funcName,
@@ -424,12 +431,13 @@ class CryptoWolf extends Bot {
   }
 
   async approve(contract, amount) {
+    this.logger.debug(`approve(${contract}, ${amount})`);
     const amountValue = amount.replace('0x', '');
     const message = SmartContract.toContractData({
       func: 'approve(address,uint256)',
       params: [
         this.routerContractAddress.replace('0x', ''),
-        (amountValue && amountValue === '0') ? amount : ''.padEnd(64, 'f'),
+        ''.padEnd(64, 'f'),
       ],
     });
     this.logger.debug('approve message', message);
@@ -455,7 +463,6 @@ class CryptoWolf extends Bot {
     this.logger.debug('approve transaction', transaction);
     const res = await this.tw.sendTransaction(this.accountInfo.id, transaction.data);
     this.logger.debug('approve transaction res', res);
-
     return res;
   }
 }

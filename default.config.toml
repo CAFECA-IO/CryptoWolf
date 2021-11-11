@@ -12,10 +12,9 @@ debug = false
 type = "ethereum"
 blockchainId = 'F000003C'
 factoryContractAddress = ''
-
-  [blockchain.tokenPair]
-  token0Address = ''
-  token1Address = ''
+routerContractAddress = ''
+token0Address = ''
+token1Address = ''
 
 [database]
 type = "firebase"
