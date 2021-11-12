@@ -387,8 +387,8 @@ class CryptoWolf extends Bot {
 
     const funcName = 'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)';
 
-    const amountInData = amountIn.replace('0x', '').padStart(64, '0');
-    const minAmountOutData = minAmountOut.replace('0x', '').padStart(64, '0');
+    const amountInData = (new BigNumber(amountIn)).toString(16).replace('0x', '').padStart(64, '0');
+    const minAmountOutData = (new BigNumber(minAmountOut)).toString(16).replace('0x', '').padStart(64, '0');
     const toData = this.selfAddress.replace('0x', '').padStart(64, '0');
     // const dateline = Utils.toHex(Math.round(Date.now() / 1000))
     const dateline = Utils.toHex(Date.now())
