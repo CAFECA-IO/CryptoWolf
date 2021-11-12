@@ -10,13 +10,14 @@ debug = false
 
 [blockchain]
 type = "ethereum"
+blockchainId = 'F000003C'
+factoryContractAddress = ''
+routerContractAddress = ''
+token0Address = ''
+token1Address = ''
 
 [database]
 type = "firebase"
-
-[tokenPair]
-firstTokenAddress = ''
-secondTokenAddress = ''
 
 [tidewalletjs]
 apiURL = 'https://staging.tidewallet.io/api/v1'

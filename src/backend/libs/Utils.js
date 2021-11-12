@@ -12,6 +12,7 @@ const toml = require('toml');
 const i18n = require('i18n');
 const dvalue = require('dvalue');
 const ecRequest = require('ecrequest');
+const BigNumber = require('bignumber.js');
 
 class Utils {
   static waterfallPromise(jobs) {
@@ -463,6 +464,7 @@ class Utils {
       log: console.log,
       debug: base.debug ? console.log : () => {},
       trace: console.trace,
+      error: console.error,
     });
   }
 
@@ -583,6 +585,41 @@ class Utils {
         }
       }
     };
+  }
+
+  static leftPad32(str) {
+    let result = '';
+    let length = 32 * 2;
+    let arr;
+    if (typeof str === 'string') {
+      str = str.replace('0x', '');
+      length -= (str.length % length) ? (str.length % length) : length;
+      arr = new Array(length).fill(0);
+      arr.push(str);
+    } else {
+      arr = new Array(length).fill(0);
+    }
+    result = arr.join('');
+    console.log('leftPad32 str', str, str.length);
+    console.log('leftPad32 result', result, result.length);
+
+    return result;
+  }
+
+  static rightPad32(str) {
+    let result = '';
+    let length = 32 * 2;
+    let arr = [];
+    if (typeof str === 'string') {
+      str = str.replace('0x', '');
+      length -= (str.length % length) ? (str.length % length) : length;
+      arr.push(str);
+      arr = arr.concat(new Array(length).fill(0));
+    } else {
+      arr = new Array(length).fill(0);
+    }
+    result = arr.join('');
+    return result;
   }
 }
 
