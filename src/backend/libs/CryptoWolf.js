@@ -119,14 +119,14 @@ class CryptoWolf extends Bot {
     randomNum = isPlus ? randomNum : randomNum.multipliedBy(-1);
 
     const bnMP = new BigNumber(this.mP);
-    const diff = bnMP.multipliedBy(randomNum).integerValue();
+    const diff = bnMP.multipliedBy(randomNum);
 
     const bnRes = bnMP.plus(diff);
 
     this.lastMP = this.eP;
-    this.eP = bnRes.toFixed();
+    this.eP = bnRes.toFixed(18);
 
-    return bnRes.toFixed();
+    return this.eP;
   }
 
   async calculateStandardDeviation() {
@@ -182,7 +182,8 @@ class CryptoWolf extends Bot {
   }
 
   async trade() {
-    this.logger.debug('trade');
+    this.logger.debug('trade eP', this.eP);
+    this.logger.debug('trade mP', this.mP);
     // if eP > mP => Buy A, if eP < mP => Buy B
     if (!this.mP) throw new Error('market price not prepared');
     if (!this.eP) throw new Error('expect price not prepared');
@@ -232,6 +233,7 @@ class CryptoWolf extends Bot {
         await this.approve(this.token0Address, amount.token0To1.amountIn);
       }
     }
+    if ((new BigNumber(amountIn)).isZero()) throw new Error('amountIn is 0');
     const message = this.swapTokenData(amountIn, minAmountOut, amountInToken, amountOutToken);
     transaction.message = message;
 
@@ -274,14 +276,14 @@ class CryptoWolf extends Bot {
           // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(0.001).dividedBy(bnMP).multipliedBy(0.9)
           //   .integerValue()
           //   .toFixed(),
-          minAmountOut: '0', // -- temp
+          minAmountOut: '1', // -- temp
         },
         token1To0: {
           amountIn: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
           // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(0.001).multipliedBy(bnMP).multipliedBy(0.9)
           //   .integerValue()
           //   .toFixed(),
-          minAmountOut: '0', // -- temp
+          minAmountOut: '1', // -- temp
         },
       };
     }
@@ -289,7 +291,7 @@ class CryptoWolf extends Bot {
     let rate = new BigNumber(1).multipliedBy(MAX_PROTECTION);
     const d = bnEP.minus(bnMP).abs().dividedBy(new BigNumber(this.sD));
 
-    if (d.lte(1)) rate = d.multipliedBy(0.68);
+    if (d.lte(1)) rate = d.multipliedBy(0.68).multipliedBy(MAX_PROTECTION);
     if (d.gt(1) && d.lte(2)) rate = d.minus(1).multipliedBy(0.27).plus(0.68).multipliedBy(MAX_PROTECTION);
     if (d.gt(2) && d.lte(3)) rate = d.minus(2).multipliedBy(0.047).plus(0.95).multipliedBy(MAX_PROTECTION);
 
@@ -299,14 +301,14 @@ class CryptoWolf extends Bot {
         // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(rate).dividedBy(bnMP).multipliedBy(0.9)
         //   .integerValue()
         //   .toFixed(),
-        minAmountOut: '0', // -- temp
+        minAmountOut: '1', // -- temp
       },
       token1To0: {
         amountIn: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
         // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(rate).multipliedBy(bnMP).multipliedBy(0.9)
         //   .integerValue()
         //   .toFixed(),
-        minAmountOut: '0', // -- temp
+        minAmountOut: '1', // -- temp
       },
     };
   }
