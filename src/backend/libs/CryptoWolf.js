@@ -7,6 +7,7 @@ const Utils = require('./Utils');
 
 const MPS_MAX_LENGTH = 40;
 const TRADE_INTERVAL = 10 * 60 * 1000;
+const CYCLE_INTERVAL = 15 * 1000;
 
 class CryptoWolf extends Bot {
   constructor() {
@@ -68,12 +69,13 @@ class CryptoWolf extends Bot {
         this.lastTradeTime = 0;
         this._tradeInterval = TRADE_INTERVAL;
         this._mPsMaxLength = MPS_MAX_LENGTH;
+        this._cycleInterval = CYCLE_INTERVAL;
 
         return this;
       });
   }
 
-  start(mPsLength) {
+  start(mPsLength, cycleInterval) {
     return super.start()
       .then(async () => {
         const overview = await this.tw.overview();
@@ -90,6 +92,7 @@ class CryptoWolf extends Bot {
 
         this.lastTradeTime = Date.now();
         this._mPsMaxLength = mPsLength || this._mPsMaxLength;
+        this._cycleInterval = cycleInterval || this._cycleInterval;
         return this;
       });
   }
@@ -115,7 +118,7 @@ class CryptoWolf extends Bot {
             this.logger.error(error);
           }
           this.tradingLock = false;
-        }, 15000);
+        }, this._cycleInterval);
         return this;
       });
   }
