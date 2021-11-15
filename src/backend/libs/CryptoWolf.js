@@ -66,12 +66,14 @@ class CryptoWolf extends Bot {
         this.mP = ''; // market price
 
         this.lastTradeTime = 0;
+        this._tradeInterval = TRADE_INTERVAL;
+        this._mPsMaxLength = MPS_MAX_LENGTH;
 
         return this;
       });
   }
 
-  start() {
+  start(mPsLength) {
     return super.start()
       .then(async () => {
         const overview = await this.tw.overview();
@@ -87,6 +89,7 @@ class CryptoWolf extends Bot {
         await this.getTokenDetail();
 
         this.lastTradeTime = Date.now();
+        this._mPsMaxLength = mPsLength || this._mPsMaxLength;
         return this;
       });
   }
@@ -100,11 +103,13 @@ class CryptoWolf extends Bot {
             this.tradingLock = true;
             await this.checkMarketPrice();
             const now = Date.now();
-            if (this.mPs.length === MPS_MAX_LENGTH && now - this.lastTradeTime >= TRADE_INTERVAL) {
-              this.lastTradeTime = now;
+            if (this.mPs.length === this._mPsMaxLength) {
               await this.calculateExpectPrice();
               await this.calculateStandardDeviation();
-              await this.trade();
+              if (now - this.lastTradeTime >= this._tradeInterval) {
+                this.lastTradeTime = now;
+                await this.trade();
+              }
             }
           } catch (error) {
             this.logger.error(error);
@@ -114,6 +119,8 @@ class CryptoWolf extends Bot {
         return this;
       });
   }
+
+  set tradeInterval(milisec) { this._tradeInterval = milisec; }
 
   async calculateExpectPrice() {
     // TODO: use ai to calculate
