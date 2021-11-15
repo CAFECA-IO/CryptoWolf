@@ -6,6 +6,7 @@ const Transaction = require('../structs/Transaction');
 const Utils = require('./Utils');
 
 const MPS_MAX_LENGTH = 40;
+const TRADE_INTERVAL = 10 * 60 * 1000;
 
 class CryptoWolf extends Bot {
   constructor() {
@@ -64,6 +65,8 @@ class CryptoWolf extends Bot {
         this.sD = ''; // standard Deviation
         this.mP = ''; // market price
 
+        this.lastTradeTime = 0;
+
         return this;
       });
   }
@@ -82,6 +85,8 @@ class CryptoWolf extends Bot {
 
         // get token detail
         await this.getTokenDetail();
+
+        this.lastTradeTime = Date.now();
         return this;
       });
   }
@@ -94,7 +99,9 @@ class CryptoWolf extends Bot {
             if (this.tradingLock) return;
             this.tradingLock = true;
             await this.checkMarketPrice();
-            if (this.mPs.length === MPS_MAX_LENGTH) {
+            const now = Date.now();
+            if (this.mPs.length === MPS_MAX_LENGTH && now - this.lastTradeTime >= TRADE_INTERVAL) {
+              this.lastTradeTime = now;
               await this.calculateExpectPrice();
               await this.calculateStandardDeviation();
               await this.trade();
