@@ -202,7 +202,7 @@ class CryptoWolf extends Bot {
   async trade() {
     this.logger.debug('trade eP', this.eP);
     this.logger.debug('trade mP', this.mP);
-    // if eP > mP => Buy A, if eP < mP => Buy B
+    // if eP > mP => Buy token 1, if eP < mP => Buy token0
     if (!this.mP) throw new Error('market price not prepared');
     if (!this.eP) throw new Error('expect price not prepared');
 
@@ -221,21 +221,6 @@ class CryptoWolf extends Bot {
     let amountOutToken = '';
     const amount = await this.tradingAmount();
     if (bnEP.gt(bnMP)) {
-      // buy 0
-      amountIn = amount.token1To0.amountIn;
-      minAmountOut = amount.token1To0.minAmountOut;
-      amountInToken = {
-        decimals: this.token1Decimals,
-        contract: this.token1Address,
-      };
-      amountOutToken = {
-        decimals: this.token0Decimals,
-        contract: this.token0Address,
-      };
-      if (!await this.isAllowanceEnough(this.token1Address, amount.token1To0.amountIn)) {
-        await this.approve(this.token1Address, amount.token1To0.amountIn);
-      }
-    } else {
       // buy 1
       amountIn = amount.token0To1.amountIn;
       minAmountOut = amount.token0To1.minAmountOut;
@@ -249,6 +234,21 @@ class CryptoWolf extends Bot {
       };
       if (!await this.isAllowanceEnough(this.token0Address, amount.token0To1.amountIn)) {
         await this.approve(this.token0Address, amount.token0To1.amountIn);
+      }
+    } else {
+      // buy 0
+      amountIn = amount.token1To0.amountIn;
+      minAmountOut = amount.token1To0.minAmountOut;
+      amountInToken = {
+        decimals: this.token1Decimals,
+        contract: this.token1Address,
+      };
+      amountOutToken = {
+        decimals: this.token0Decimals,
+        contract: this.token0Address,
+      };
+      if (!await this.isAllowanceEnough(this.token1Address, amount.token1To0.amountIn)) {
+        await this.approve(this.token1Address, amount.token1To0.amountIn);
       }
     }
     if ((new BigNumber(amountIn)).isZero()) throw new Error('amountIn is 0');
