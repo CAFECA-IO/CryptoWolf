@@ -1,6 +1,7 @@
 const BigNumber = require('bignumber.js');
 const TideWallet = require('@cafeca/tidewalletjs/src/index');
 const Bot = require('./Bot');
+const Policy = require('./Policy');
 const SmartContract = require('./SmartContract');
 const Transaction = require('../structs/Transaction');
 const Utils = require('./Utils');
@@ -65,17 +66,21 @@ class CryptoWolf extends Bot {
         this.lastMP = ''; // last market price
         this.sD = ''; // standard Deviation
         this.mP = ''; // market price
+        this.l0 = ''; // Liquidity 0
+        this.l1 = ''; // Liquidity 1
 
         this.lastTradeTime = 0;
         this._tradeInterval = TRADE_INTERVAL;
         this._mPsMaxLength = MPS_MAX_LENGTH;
         this._cycleInterval = CYCLE_INTERVAL;
 
+        this._pricePolicy = this.config.policy.pricePolicy || Policy.PRICE_POLICY.PREDICT;
+
         return this;
       });
   }
 
-  start(mPsLength, cycleInterval) {
+  start(mPsLength, cycleInterval, pricePolicy) {
     return super.start()
       .then(async () => {
         const overview = await this.tw.overview();
@@ -93,6 +98,9 @@ class CryptoWolf extends Bot {
         this.lastTradeTime = Date.now();
         this._mPsMaxLength = mPsLength || this._mPsMaxLength;
         this._cycleInterval = cycleInterval || this._cycleInterval;
+
+        this._pricePolicy = pricePolicy || this._pricePolicy;
+
         return this;
       });
   }
@@ -126,29 +134,19 @@ class CryptoWolf extends Bot {
   set tradeInterval(milisec) { this._tradeInterval = milisec; }
 
   async calculateExpectPrice() {
-    // TODO: use ai to calculate
-
-    if (!this.mP) throw new Error('market price not prepared');
-    // +- 10%
-    const { expectRateBound } = this.config.base;
-    let randomNum = (BigNumber.random(9).multipliedBy(expectRateBound)); // random(0 ~ 0.1) 小數點後9位
-    const isPlus = (Math.random() * 2) < 1;
-    randomNum = isPlus ? randomNum : randomNum.multipliedBy(-1);
-
-    const bnMP = new BigNumber(this.mP);
-    const diff = bnMP.multipliedBy(randomNum);
-
-    const bnRes = bnMP.plus(diff);
-
-    this.lastMP = this.eP;
-    this.eP = bnRes.toFixed(18);
-
-    return this.eP;
+    // use policy for now until factory
+    switch (this._pricePolicy) {
+      case Policy.PRICE_POLICY.TARGET:
+        return this._targetPrice();
+      case Policy.PRICE_POLICY.PREDICT:
+      default:
+        return this._predictPrice();
+    }
   }
 
   async calculateStandardDeviation() {
     if (!this.mP) throw new Error('market price not prepared');
-    if (!this.mP) await this.calculateExpectPrice();
+    // if (!this.mP) await this.calculateExpectPrice();
     if (!this.lastMP) this.lastMP = this.mP;
 
     const bnMP = new BigNumber(this.mP);
@@ -182,6 +180,9 @@ class CryptoWolf extends Bot {
       mP: bnToken0Balance.dividedBy(bnToken1Balance).toFixed(),
       timestamp,
     });
+
+    this.l0 = bnToken0Balance.toFixed();
+    this.l1 = bnToken1Balance.toFixed();
 
     if (this.mPs.length > MPS_MAX_LENGTH) this.mPs.shift(); // remove oldest one
 
@@ -272,62 +273,13 @@ class CryptoWolf extends Bot {
   }
 
   async tradingAmount() {
-    // if sD == 0, amount = 0.1% total;
-    // d = |(eP-mP)| / sD
-    // d <= 1 -> amount = (d * 68%) * 10% total
-    // 1 < d <= 2 -> amount = (68% + (d-1) * (95 - 68)%) * 10% total
-    // 2 < d <= 3 -> amount = (95% + (d-2) * (99.7 - 95)%) * 10% total
-    // d > 3 -> amount = 10% total
-    if (!this.mP) throw new Error('market price not prepared');
-    if (!this.eP) throw new Error('expect price not prepared');
-
-    const balance = await this.getBalance();
-    const MAX_PROTECTION = 0.1;
-
-    const bnEP = new BigNumber(this.eP);
-    const bnMP = new BigNumber(this.mP);
-    if (this.sD === '0') {
-      return {
-        token0To1: {
-          amountIn: (new BigNumber(balance.token0)).multipliedBy(0.001).integerValue().toFixed(),
-          // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(0.001).dividedBy(bnMP).multipliedBy(0.9)
-          //   .integerValue()
-          //   .toFixed(),
-          minAmountOut: '1', // -- temp
-        },
-        token1To0: {
-          amountIn: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
-          // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(0.001).multipliedBy(bnMP).multipliedBy(0.9)
-          //   .integerValue()
-          //   .toFixed(),
-          minAmountOut: '1', // -- temp
-        },
-      };
+    switch (this._pricePolicy) {
+      case Policy.PRICE_POLICY.TARGET:
+        return this._targetAmount();
+      case Policy.PRICE_POLICY.PREDICT:
+      default:
+        return this._predictAmount();
     }
-
-    let rate = new BigNumber(1).multipliedBy(MAX_PROTECTION);
-    const d = bnEP.minus(bnMP).abs().dividedBy(new BigNumber(this.sD));
-
-    if (d.lte(1)) rate = d.multipliedBy(0.68).multipliedBy(MAX_PROTECTION);
-    if (d.gt(1) && d.lte(2)) rate = d.minus(1).multipliedBy(0.27).plus(0.68).multipliedBy(MAX_PROTECTION);
-    if (d.gt(2) && d.lte(3)) rate = d.minus(2).multipliedBy(0.047).plus(0.95).multipliedBy(MAX_PROTECTION);
-
-    return {
-      token0To1: {
-        amountIn: (new BigNumber(balance.token0)).multipliedBy(rate).integerValue().toFixed(),
-        // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(rate).dividedBy(bnMP).multipliedBy(0.9)
-        //   .integerValue()
-        //   .toFixed(),
-        minAmountOut: '1', // -- temp
-      },
-      token1To0: {
-        amountIn: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
-        // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(rate).multipliedBy(bnMP).multipliedBy(0.9)
-        //   .integerValue()
-        //   .toFixed(),
-        minAmountOut: '1', // -- temp
-      },
-    };
   }
 
   async getPair(token0Address, token1Address) {
@@ -484,6 +436,150 @@ class CryptoWolf extends Bot {
     this.logger.debug('approve transaction res', res);
     return res;
   }
+
+  // policy, temp for now until factory
+  _predictPrice() {
+    // TODO: use ai to calculate
+
+    if (!this.mP) throw new Error('market price not prepared');
+    // +- 10%
+    const { expectRateBound } = this.config.base;
+    let randomNum = (BigNumber.random(9).multipliedBy(expectRateBound)); // random(0 ~ 0.1) 小數點後9位
+    const isPlus = (Math.random() * 2) < 1;
+    randomNum = isPlus ? randomNum : randomNum.multipliedBy(-1);
+
+    const bnMP = new BigNumber(this.mP);
+    const diff = bnMP.multipliedBy(randomNum);
+
+    const bnRes = bnMP.plus(diff);
+
+    this.lastMP = this.eP;
+    this.eP = bnRes.toFixed(18);
+
+    return this.eP;
+  }
+
+  async _predictAmount() {
+    // if sD == 0, amount = 0.1% total;
+    // d = |(eP-mP)| / sD
+    // d <= 1 -> amount = (d * 68%) * 10% total
+    // 1 < d <= 2 -> amount = (68% + (d-1) * (95 - 68)%) * 10% total
+    // 2 < d <= 3 -> amount = (95% + (d-2) * (99.7 - 95)%) * 10% total
+    // d > 3 -> amount = 10% total
+    if (!this.mP) throw new Error('market price not prepared');
+    if (!this.eP) throw new Error('expect price not prepared');
+
+    const balance = await this.getBalance();
+    const MAX_PROTECTION = 0.1;
+
+    const bnEP = new BigNumber(this.eP);
+    const bnMP = new BigNumber(this.mP);
+    if (this.sD === '0') {
+      return {
+        token0To1: {
+          amountIn: (new BigNumber(balance.token0)).multipliedBy(0.001).integerValue().toFixed(),
+          // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(0.001).dividedBy(bnMP).multipliedBy(0.9)
+          //   .integerValue()
+          //   .toFixed(),
+          minAmountOut: '1', // -- temp
+        },
+        token1To0: {
+          amountIn: (new BigNumber(balance.token1)).multipliedBy(0.001).integerValue().toFixed(),
+          // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(0.001).multipliedBy(bnMP).multipliedBy(0.9)
+          //   .integerValue()
+          //   .toFixed(),
+          minAmountOut: '1', // -- temp
+        },
+      };
+    }
+
+    let rate = new BigNumber(1).multipliedBy(MAX_PROTECTION);
+    const d = bnEP.minus(bnMP).abs().dividedBy(new BigNumber(this.sD));
+
+    if (d.lte(1)) rate = d.multipliedBy(0.68).multipliedBy(MAX_PROTECTION);
+    if (d.gt(1) && d.lte(2)) rate = d.minus(1).multipliedBy(0.27).plus(0.68).multipliedBy(MAX_PROTECTION);
+    if (d.gt(2) && d.lte(3)) rate = d.minus(2).multipliedBy(0.047).plus(0.95).multipliedBy(MAX_PROTECTION);
+
+    return {
+      token0To1: {
+        amountIn: (new BigNumber(balance.token0)).multipliedBy(rate).integerValue().toFixed(),
+        // minAmountOut: (new BigNumber(balance.token0)).multipliedBy(rate).dividedBy(bnMP).multipliedBy(0.9)
+        //   .integerValue()
+        //   .toFixed(),
+        minAmountOut: '1', // -- temp
+      },
+      token1To0: {
+        amountIn: (new BigNumber(balance.token1)).multipliedBy(rate).integerValue().toFixed(),
+        // minAmountOut: (new BigNumber(balance.token1)).multipliedBy(rate).multipliedBy(bnMP).multipliedBy(0.9)
+        //   .integerValue()
+        //   .toFixed(),
+        minAmountOut: '1', // -- temp
+      },
+    };
+  }
+
+  async _targetPrice() {
+    // USD/ETH
+    const exchangeRateList = await this.tw.getExchangeRateList();
+    const { cryptos } = exchangeRateList;
+    const eth = cryptos.find((e) => e.name === 'ETH');
+    this.eP = eth.exchangeRate;
+    return this.eP;
+  }
+
+  _targetAmount() {
+    // mP = l0/l1
+    // target price = eP = x * mp
+    // if x > 1, use l0 buy l1, (sqrt(x)-1) * l0
+    // if 0 < x < 1, use l1 buy l0, (sqrt(1/x)-1) * l1
+    // if x == 1, return 0
+
+    const bnMP = new BigNumber(this.mP);
+    const bnEP = new BigNumber(this.eP);
+    const bnX = bnEP.dividedBy(bnMP);
+
+    if (bnX.gt(1)) {
+      return {
+        token0To1: {
+          amountIn: (bnX.sqrt().minus(1)).multipliedBy(new BigNumber(this.l0)).integerValue()
+            .toFixed(),
+          minAmountOut: '1', // temp
+        },
+        token1To0: {
+          amountIn: '0',
+          minAmountOut: '0',
+        },
+      };
+    }
+
+    if (bnX.gt(0) && bnX.lt(1)) {
+      const bnY = bnMP.dividedBy(bnEP);
+      return {
+        token0To1: {
+          amountIn: '0',
+          minAmountOut: '0',
+        },
+        token1To0: {
+          amountIn: (bnY.sqrt().minus(1)).multipliedBy(new BigNumber(this.l1)).integerValue()
+            .toFixed(),
+          minAmountOut: '1', // temp
+        },
+      };
+    }
+    if (bnX.eq(1)) {
+      return {
+        token1To0: {
+          amountIn: '0',
+          minAmountOut: '0',
+        },
+        token0To1: {
+          amountIn: '0',
+          minAmountOut: '0',
+        },
+      };
+    }
+  }
+  // policy end
 }
 
 module.exports = CryptoWolf;
