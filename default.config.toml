@@ -28,6 +28,10 @@ installId = 'myInstallID'
 debugMode = true
 networkPublish = false
 
+[policy]
+# 'predict', 'target'
+pricePolicy = 'predict'
+
 [api]
 pathname = [
   "get | /,/version | Static.Utils.readPackageInfo"
