@@ -12,20 +12,14 @@ const CYCLE_INTERVAL = 15 * 1000;
 
 class RobotBase extends RobotInterface {
   constructor({
-    config, database, logger, i18n,
+    config, logger,
   }) {
     super();
     this.config = config;
-    this.database = database;
     this.logger = logger;
-    this.i18n = i18n;
-    return this;
-  }
 
-  async init({
-    user, api, debugMode, networkPublish, token0Address, token1Address,
-    tradeInterval = TRADE_INTERVAL, mPsMaxLength = MPS_MAX_LENGTH, cycleInterval = CYCLE_INTERVAL,
-  }) {
+    // params
+
     this.tradingLock = false;
     this._baseChain = this.config.blockchain;
     this.token0Decimals = 0;
@@ -33,12 +27,10 @@ class RobotBase extends RobotInterface {
     this.factoryContractAddress = this._baseChain.factoryContractAddress;
     this.routerContractAddress = this._baseChain.routerContractAddress;
     this.pairContractAddress = '';
-    this.token0Address = token0Address;
-    this.token1Address = token1Address;
 
     // price history queue
     this.mPs = [];
-    this._mPsMaxLength = mPsMaxLength;
+    this._mPsMaxLength = 0;
 
     this.eP = ''; // expected price
     this.lastMP = ''; // last market price
@@ -48,6 +40,24 @@ class RobotBase extends RobotInterface {
     this.l1 = ''; // Liquidity 1
 
     this.lastTradeTime = 0;
+    this._tradeInterval = 0;
+    this._cycleInterval = 0;
+
+    this.accountInfo = {};
+    this.selfAddress = '';
+
+    return this;
+  }
+
+  async init({
+    user, api, debugMode, networkPublish, token0Address, token1Address,
+    tradeInterval = TRADE_INTERVAL, mPsMaxLength = MPS_MAX_LENGTH, cycleInterval = CYCLE_INTERVAL,
+  }) {
+    this.token0Address = token0Address;
+    this.token1Address = token1Address;
+
+    this._mPsMaxLength = mPsMaxLength;
+
     this._tradeInterval = tradeInterval;
     this._cycleInterval = cycleInterval;
 
