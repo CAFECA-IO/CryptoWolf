@@ -42,6 +42,7 @@ class RobotBase extends RobotInterface {
     this.lastTradeTime = 0;
     this._tradeInterval = 0;
     this._cycleInterval = 0;
+    this.intervalId = {};
 
     this.accountInfo = {};
     this.selfAddress = '';
@@ -64,6 +65,8 @@ class RobotBase extends RobotInterface {
     this._cycleInterval = cycleInterval;
 
     this.tw = new TideWallet();
+    this.tw.on('ready', () => { this.logger.debug('TideWallet is Ready'); });
+
     return this.tw.init({
       user, api, debugMode, networkPublish,
     });
@@ -84,7 +87,7 @@ class RobotBase extends RobotInterface {
 
     this.lastTradeTime = Date.now();
 
-    setInterval(async () => {
+    this.intervalId = setInterval(async () => {
       try {
         if (this.tradingLock) return;
         this.tradingLock = true;
@@ -103,6 +106,11 @@ class RobotBase extends RobotInterface {
       }
       this.tradingLock = false;
     }, this._cycleInterval);
+  }
+
+  async stop() {
+    clearInterval(this.intervalId);
+    await this.tw.close();
   }
 
   async approve(contract, amount) {
@@ -181,13 +189,13 @@ class RobotBase extends RobotInterface {
     this.l0 = bnToken0Balance.toFixed();
     this.l1 = bnToken1Balance.toFixed();
 
-    if (this.mPs.length > MPS_MAX_LENGTH) this.mPs.shift(); // remove oldest one
+    if (this.mPs.length > this._mPsMaxLength) this.mPs.shift(); // remove oldest one
 
     let total = '0';
     this.mPs.forEach((v) => {
       total = (new BigNumber(total)).plus(new BigNumber(v.mP)).toFixed();
     });
-    if (this.mPs.length === MPS_MAX_LENGTH) {
+    if (this.mPs.length === this._mPsMaxLength) {
       this.mP = (new BigNumber(total)).dividedBy(new BigNumber(this.mPs.length)).toFixed();
     }
 

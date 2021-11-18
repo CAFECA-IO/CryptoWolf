@@ -21,88 +21,89 @@ class CryptoWolf extends Bot {
   }) {
     return super.init({
       config, database, logger, i18n,
-    }).then(() => {
-      this.tw = new TideWallet();
-      // this.tw.on('ready', () => { this.logger.debug('TideWallet is Ready'); });
-      // this.tw.on('notice', (data) => {
-      //   this.logger.debug('TideWallet get Notice');
-      //   this.logger.debug(data);
-      // });
-      this.tw.on('update', (data) => {
-        this.logger.debug('TideWallet Data Updated');
-        this.logger.debug(data);
-      });
+    });
+    // .then(() => {
+    //   this.tw = new TideWallet();
+    //   // this.tw.on('ready', () => { this.logger.debug('TideWallet is Ready'); });
+    //   // this.tw.on('notice', (data) => {
+    //   //   this.logger.debug('TideWallet get Notice');
+    //   //   this.logger.debug(data);
+    //   // });
+    //   this.tw.on('update', (data) => {
+    //     this.logger.debug('TideWallet Data Updated');
+    //     this.logger.debug(data);
+    //   });
 
-      const api = {
-        apiURL: this.config.tidewalletjs.apiURL,
-        apiKey: this.config.tidewalletjs.apiKey,
-        apiSecret: this.config.tidewalletjs.apiSecret,
-      };
-      const user = {
-        thirdPartyId: this.config.tidewalletjs.thirdPartyId,
-        installId: this.config.tidewalletjs.installId,
-      };
-      const { debugMode, networkPublish } = this.config.tidewalletjs;
+    //   const api = {
+    //     apiURL: this.config.tidewalletjs.apiURL,
+    //     apiKey: this.config.tidewalletjs.apiKey,
+    //     apiSecret: this.config.tidewalletjs.apiSecret,
+    //   };
+    //   const user = {
+    //     thirdPartyId: this.config.tidewalletjs.thirdPartyId,
+    //     installId: this.config.tidewalletjs.installId,
+    //   };
+    //   const { debugMode, networkPublish } = this.config.tidewalletjs;
 
-      return this.tw.init({
-        user, api, debugMode, networkPublish,
-      });
-    })
-      .then(() => {
-        this.tradingLock = false;
-        this._baseChain = this.config.blockchain;
-        this.token0Decimals = 0;
-        this.token1Decimals = 0;
-        this.factoryContractAddress = this._baseChain.factoryContractAddress;
-        this.routerContractAddress = this._baseChain.routerContractAddress;
-        this.pairContractAddress = '';
-        this.token0Address = this._baseChain.token0Address;
-        this.token1Address = this._baseChain.token1Address;
+    //   return this.tw.init({
+    //     user, api, debugMode, networkPublish,
+    //   });
+    // })
+    // .then(() => {
+    //   this.tradingLock = false;
+    //   this._baseChain = this.config.blockchain;
+    //   this.token0Decimals = 0;
+    //   this.token1Decimals = 0;
+    //   this.factoryContractAddress = this._baseChain.factoryContractAddress;
+    //   this.routerContractAddress = this._baseChain.routerContractAddress;
+    //   this.pairContractAddress = '';
+    //   this.token0Address = this._baseChain.token0Address;
+    //   this.token1Address = this._baseChain.token1Address;
 
-        // 20 min price storage
-        this.mPs = [];
+    //   // 20 min price storage
+    //   this.mPs = [];
 
-        this.eP = ''; // expected price
-        this.lastMP = ''; // last market price
-        this.sD = ''; // standard Deviation
-        this.mP = ''; // market price
-        this.l0 = ''; // Liquidity 0
-        this.l1 = ''; // Liquidity 1
+    //   this.eP = ''; // expected price
+    //   this.lastMP = ''; // last market price
+    //   this.sD = ''; // standard Deviation
+    //   this.mP = ''; // market price
+    //   this.l0 = ''; // Liquidity 0
+    //   this.l1 = ''; // Liquidity 1
 
-        this.lastTradeTime = 0;
-        this._tradeInterval = TRADE_INTERVAL;
-        this._mPsMaxLength = MPS_MAX_LENGTH;
-        this._cycleInterval = CYCLE_INTERVAL;
+    //   this.lastTradeTime = 0;
+    //   this._tradeInterval = TRADE_INTERVAL;
+    //   this._mPsMaxLength = MPS_MAX_LENGTH;
+    //   this._cycleInterval = CYCLE_INTERVAL;
 
-        this._pricePolicy = this.config.policy.pricePolicy || Policy.PRICE_POLICY.PREDICT;
+    //   this._pricePolicy = this.config.policy.pricePolicy || Policy.PRICE_POLICY.PREDICT;
 
-        return this;
-      });
+    //   return this;
+    // });
   }
 
   start(mPsLength, cycleInterval, pricePolicy) {
-    return super.start()
-      .then(async () => {
-        const overview = await this.tw.overview();
-        this.accountInfo = overview.currencies.find((info) => (info.blockchainId === this._baseChain.blockchainId
-            && info.type === 'currency'));
-        this.selfAddress = await this.tw.getReceivingAddress(this.accountInfo.id);
-        this.logger.log('this.selfAddress', this.selfAddress);
+    return super.start();
+    // .then(async () => {
+    //   const overview = await this.tw.overview();
+    //   this.accountInfo = overview.currencies.find((info) => (info.blockchainId === this._baseChain.blockchainId
+    //       && info.type === 'currency'));
+    //   this.selfAddress = await this.tw.getReceivingAddress(this.accountInfo.id);
+    //   this.logger.log('this.selfAddress', this.selfAddress);
 
-        // get pair contract
-        this.pairContractAddress = await this.getPair(this.token0Address, this.token1Address);
+    //   // get pair contract
+    //   this.pairContractAddress = await this.getPair(this.token0Address, this.token1Address);
 
-        // get token detail
-        await this.getTokenDetail();
+    //   // get token detail
+    //   await this.getTokenDetail();
 
-        this.lastTradeTime = Date.now();
-        this._mPsMaxLength = mPsLength || this._mPsMaxLength;
-        this._cycleInterval = cycleInterval || this._cycleInterval;
+    //   this.lastTradeTime = Date.now();
+    //   this._mPsMaxLength = mPsLength || this._mPsMaxLength;
+    //   this._cycleInterval = cycleInterval || this._cycleInterval;
 
-        this._pricePolicy = pricePolicy || this._pricePolicy;
+    //   this._pricePolicy = pricePolicy || this._pricePolicy;
 
-        return this;
-      });
+    //   return this;
+    // });
   }
 
   ready() {
