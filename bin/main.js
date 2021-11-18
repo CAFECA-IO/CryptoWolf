@@ -118,3 +118,8 @@ Utils.readConfig({ filePath: cfg })
   }
 })
 .catch(console.trace);
+
+process.on('unhandledRejection', (reason, p) => {
+  console.log('Unhandled Rejection at:', p, 'reason:', reason);
+  // application specific logging, throwing an error, or other logic here
+});
