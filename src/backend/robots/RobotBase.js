@@ -49,6 +49,8 @@ class RobotBase extends RobotInterface {
     return this;
   }
 
+  set tradeInterval(milisec) { this._tradeInterval = milisec; }
+
   async init({
     user, api, debugMode, networkPublish, token0Address, token1Address,
     tradeInterval = TRADE_INTERVAL, mPsMaxLength = MPS_MAX_LENGTH, cycleInterval = CYCLE_INTERVAL,

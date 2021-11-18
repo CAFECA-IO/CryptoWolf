@@ -1,6 +1,7 @@
 const BigNumber = require('bignumber.js');
 
 const RobotBase = require('./RobotBase');
+const SmartContract = require('../libs/SmartContract');
 
 class PredictPriceRobot extends RobotBase {
   async calculateExpectPrice() {
@@ -22,6 +23,24 @@ class PredictPriceRobot extends RobotBase {
     this.eP = bnRes.toFixed(18);
 
     return this.eP;
+  }
+
+  async getBalance() {
+    const getBalanceMessage = SmartContract.toContractData({
+      func: 'balanceOf(address)',
+      params: [this.selfAddress.replace('0x', '')],
+    });
+    this.logger.debug('getBalance message', getBalanceMessage);
+    const { result: token0Balance } = await this.tw.callContract(this._baseChain.blockchainId, this.token0Address, getBalanceMessage);
+    this.logger.debug('get token0 balance res', token0Balance);
+
+    const { result: token1Balance } = await this.tw.callContract(this._baseChain.blockchainId, this.token1Address, getBalanceMessage);
+    this.logger.debug('get token1 balance res', token1Balance);
+
+    return {
+      token0: (new BigNumber(token0Balance, 16)).toFixed(),
+      token1: (new BigNumber(token1Balance, 16)).toFixed(),
+    };
   }
 
   async tradingAmount() {
