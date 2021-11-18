@@ -107,28 +107,29 @@ class CryptoWolf extends Bot {
 
   ready() {
     return super.ready()
-      .then(() => {
-        setInterval(async () => {
-          try {
-            if (this.tradingLock) return;
-            this.tradingLock = true;
-            await this.checkMarketPrice();
-            const now = Date.now();
-            if (this.mPs.length === this._mPsMaxLength) {
-              await this.calculateExpectPrice();
-              await this.calculateStandardDeviation();
-              if (now - this.lastTradeTime >= this._tradeInterval) {
-                this.lastTradeTime = now;
-                await this.trade();
-              }
-            }
-          } catch (error) {
-            this.logger.error(error);
-          }
-          this.tradingLock = false;
-        }, this._cycleInterval);
-        return this;
-      });
+    // .then(() => {
+    //   setInterval(async () => {
+    //     try {
+    //       if (this.tradingLock) return;
+    //       this.tradingLock = true;
+    //       await this.checkMarketPrice();
+    //       const now = Date.now();
+    //       if (this.mPs.length === this._mPsMaxLength) {
+    //         await this.calculateExpectPrice();
+    //         await this.calculateStandardDeviation();
+    //         if (now - this.lastTradeTime >= this._tradeInterval) {
+    //           this.lastTradeTime = now;
+    //           await this.trade();
+    //         }
+    //       }
+    //     } catch (error) {
+    //       this.logger.error(error);
+    //     }
+    //     this.tradingLock = false;
+    //   }, this._cycleInterval);
+    //   return this;
+    // });
+      .then(() => this);
   }
 
   set tradeInterval(milisec) { this._tradeInterval = milisec; }
