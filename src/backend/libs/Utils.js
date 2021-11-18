@@ -464,6 +464,7 @@ class Utils {
       log: console.log,
       debug: base.debug ? console.log : () => {},
       trace: console.trace,
+      info: console.info,
       error: console.error,
     });
   }
