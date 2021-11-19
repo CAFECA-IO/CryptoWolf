@@ -27,6 +27,7 @@ class RobotBase extends RobotInterface {
     this.factoryContractAddress = this._baseChain.factoryContractAddress;
     this.routerContractAddress = this._baseChain.routerContractAddress;
     this.pairContractAddress = '';
+    this.wETHAddress = '';
 
     // price history queue
     this.mPs = [];
@@ -253,6 +254,16 @@ class RobotBase extends RobotInterface {
     const { result: token1Decimals } = await this.tw.callContract(this._baseChain.blockchainId, this.token1Address, getDecimalsMessage);
     this.logger.debug('get token1 decimals res', token1Decimals);
     this.token1Decimals = parseInt(token1Decimals, 16);
+
+    // get WETH contract address
+    const getWETHMessage = SmartContract.toContractData({
+      func: 'WETH()',
+      params: [],
+    });
+    this.logger.debug('get WETH message', getWETHMessage);
+    const { result: wETHAddress } = await this.tw.callContract(this._baseChain.blockchainId, this.routerContractAddress, getWETHMessage);
+    this.logger.debug('get WETH address res', wETHAddress);
+    this.wETHAddress = `0x${wETHAddress.slice(-40)}`;
   }
 
   async isAllowanceEnough(contract, amount) {
@@ -285,17 +296,26 @@ class RobotBase extends RobotInterface {
     const dateline = Utils.toHex(Date.now())
       .replace('0x', '')
       .padStart(64, '0');
-    const addressCount = Utils.toHex(2).replace('0x', '').padStart(64, '0');
     const amountInTokenContractData = amountInToken.contract
+      .replace('0x', '')
+      .padStart(64, '0');
+    const wETHContractData = this.wETHAddress
       .replace('0x', '')
       .padStart(64, '0');
     const amountOutTokenContractData = amountOutToken.contract
       .replace('0x', '')
       .padStart(64, '0');
 
+    const addressArray = [];
+    addressArray.push(amountInTokenContractData);
+    addressArray.push(wETHContractData);
+    addressArray.push(amountOutTokenContractData);
+
+    const addressCount = Utils.toHex(addressArray.length).replace('0x', '').padStart(64, '0');
+
     const data = `${amountInData
       + minAmountOutData
-    }00000000000000000000000000000000000000000000000000000000000000a0${toData}${dateline}${addressCount}${amountInTokenContractData}${amountOutTokenContractData}`;
+    }00000000000000000000000000000000000000000000000000000000000000a0${toData}${dateline}${addressCount}${addressArray.join('')}`;
 
     const result = SmartContract.toContractData({
       func: funcName,
@@ -364,6 +384,9 @@ class RobotBase extends RobotInterface {
       if (!await this.isAllowanceEnough(this.token1Address, amount.token1To0.amountIn)) {
         await this.approve(this.token1Address, amount.token1To0.amountIn);
       }
+    }
+    if (!await this.isAllowanceEnough(this.wETHAddress, amountIn)) {
+      await this.approve(this.wETHAddress, amountIn);
     }
     const message = this.swapTokenData(amountIn, minAmountOut, amountInToken, amountOutToken);
     transaction.message = message;
